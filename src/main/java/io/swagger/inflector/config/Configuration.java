@@ -22,10 +22,13 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.swagger.inflector.converters.InputConverter;
 import io.swagger.util.Yaml;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.io.*;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -94,10 +97,13 @@ public class Configuration {
 
     public static Configuration read() {
         String configLocation = System.getProperty("config", "inflector.yaml");
-        System.out.println("loading inflector config from " + configLocation);
+        System.out.println("loading inflector config from" + configLocation);
         if(configLocation != null) {
           try {
-            return read(configLocation);
+            Configuration config = read(configLocation);
+            if (config != null) {
+                return config;
+            }
           }
           catch (Exception e) {
             // continue
@@ -106,11 +112,18 @@ public class Configuration {
         }
         try {
             // try to load from resources
-            URL url = Configuration.class.getClassLoader().getResource("inflector.yaml");
-            if(url != null) {
+            //URL url = Configuration.class.getClassLoader().getResource("inflector.yaml");
+            //System.out.println("URL :"+url);
+            File file = createInflectorFile();
+            if(file != null) {
                 try {
-                    Configuration config = Yaml.mapper().readValue(new File(url.getFile()), Configuration.class);
-                    return config;
+                    Configuration config = Yaml.mapper().readValue(file, Configuration.class);
+                    System.out.println("config :"+config);
+                    //Configuration config = Yaml.mapper().readValue(new File(url.getFile()), Configuration.class);
+                    if (config != null) {
+                      createSwaggerFile();
+                      return config;
+                    }
                 } catch (Exception e) {
                   LOGGER.warn("couldn't read inflector config from resource stream");
                   // continue
@@ -132,12 +145,32 @@ public class Configuration {
         return defaultConfiguration();
     }
 
+    private static File createInflectorFile() throws IOException{
+      InputStream in = Configuration.class.getResourceAsStream("/inflector.yaml");
+      File file = new File("inflector.yaml");
+      FileUtils.copyInputStreamToFile(in, file);
+      file.deleteOnExit();
+      return file;
+    }
+
+    private static void createSwaggerFile() throws IOException{
+      InputStream in = Configuration.class.getResourceAsStream("/swagger.yaml");
+      File file = new File("swagger.yaml");
+      FileUtils.copyInputStreamToFile(in, file);
+      file.deleteOnExit();
+    }
+
     public static Configuration read(String configLocation) throws Exception {
-        Configuration config = Yaml.mapper().readValue(new File(configLocation), Configuration.class);
+        File file = new File(configLocation);
+        System.out.println("After file reading "+configLocation);
+        Configuration config = Yaml.mapper().readValue(file, Configuration.class);
+        System.out.println("After config :"+config);
         if(config != null && config.getExceptionMappers().size() == 0) {
           config.setExceptionMappers(Configuration.defaultConfiguration().getExceptionMappers());
         }
+
         String environment = System.getProperty("environment");
+        System.out.println("After environment "+environment);
         if(environment != null) {
             System.out.println("Overriding environment to " + environment);
             config.setEnvironment(Environment.valueOf(environment));
@@ -170,7 +203,7 @@ public class Configuration {
         InputConverter.getInstance().defaultValidators();
         return this;
   }
-    
+
     public Configuration modelPackage(String modelPackage) {
         this.modelPackage = modelPackage;
         return this;
@@ -195,7 +228,7 @@ public class Configuration {
         this.swaggerUrl = swaggerUrl;
         return this;
     }
-    
+
     public Configuration exceptionMapper(String className) {
       Class<?> cls;
       try {
@@ -393,5 +426,9 @@ public class Configuration {
 
     public void setPrettyPrint(boolean prettyPrint) {
         this.prettyPrint = prettyPrint;
+    }
+
+    public String toString() {
+        return ReflectionToStringBuilder.toString(this);
     }
 }
